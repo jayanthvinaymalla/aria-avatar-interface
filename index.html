@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>ARIA — Avatar Interface</title>
+<style>
+  :root{
+    --void:   #05080D;
+    --panel:  #0B131C;
+    --line:   #1C3244;
+    --core:   #6FE3FF;
+    --core-dim: #2E6E8E;
+    --amber:  #FFB454;
+    --text:   #E7F6FB;
+    --text-dim: #5C7A8A;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--void); color:var(--text); font-family:var(--sans); overflow:hidden; }
+  button, input, textarea{ font-family:inherit; color:inherit; }
+  #app{ position:relative; height:100dvh; width:100%; }
+
+  #app::after{
+    content:""; position:absolute; inset:0; pointer-events:none; z-index:1;
+    background:repeating-linear-gradient(0deg, rgba(111,227,255,0.02) 0px, rgba(111,227,255,0.02) 1px, transparent 1px, transparent 3px);
+  }
+  .frame-corner{ position:absolute; width:24px; height:24px; border-color:var(--core-dim); border-style:solid; border-width:0; opacity:.5; z-index:5; }
+  .frame-corner.tl{ top:14px; left:14px; border-top-width:1px; border-left-width:1px; }
+  .frame-corner.tr{ top:14px; right:14px; border-top-width:1px; border-right-width:1px; }
+  .frame-corner.bl{ bottom:14px; left:14px; border-bottom-width:1px; border-left-width:1px; }
+  .frame-corner.br{ bottom:14px; right:14px; border-bottom-width:1px; border-right-width:1px; }
+
+  .topbar{
+    position:absolute; top:0; left:0; right:0; z-index:6;
+    display:flex; justify-content:space-between; align-items:flex-start; padding:18px 22px;
+    background:linear-gradient(to bottom, rgba(5,8,13,.85), transparent);
+  }
+  .brand{ font-family:var(--mono); font-size:13px; letter-spacing:.3em; color:var(--core); }
+  .brand .state{ display:block; margin-top:5px; font-size:9.5px; letter-spacing:.1em; color:var(--text-dim); }
+  .dot{ display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--text-dim); margin-right:6px; }
+  .dot.on{ background:var(--core); box-shadow:0 0 6px var(--core); }
+  .dot.alert{ background:var(--amber); box-shadow:0 0 6px var(--amber); animation:blink .6s ease-in-out infinite; }
+  @keyframes blink{ 50%{ opacity:.3; } }
+  .top-right{ display:flex; align-items:center; gap:10px; }
+  .icon-btn-sm{
+    width:30px; height:30px; border-radius:2px; border:1px solid var(--line); background:var(--panel);
+    color:var(--text-dim); font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .icon-btn-sm:hover{ color:var(--core); border-color:var(--core-dim); }
+  .account-chip{ position:relative; }
+  .account-chip .chip-btn{
+    display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--panel); border:1px solid var(--line);
+    border-radius:2px; cursor:pointer; font-family:var(--mono); font-size:10.5px; color:var(--text-dim);
+  }
+  .account-chip .chip-btn:hover{ border-color:var(--core-dim); color:var(--core); }
+  .account-menu{
+    position:absolute; top:38px; right:0; width:150px; background:var(--panel); border:1px solid var(--line);
+    border-radius:3px; display:none; z-index:20; box-shadow:0 12px 30px rgba(0,0,0,.4);
+  }
+  .account-menu.show{ display:block; }
+  .account-menu button{ display:block; width:100%; text-align:left; padding:9px 12px; background:none; border:none; cursor:pointer; font-family:var(--mono); font-size:11px; color:var(--text); }
+  .account-menu button:hover{ background:var(--void); color:var(--core); }
+
+  /* ---------- Stage: avatar + response ---------- */
+  .stage{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding:80px 24px 132px; }
+  #avatarContainer{ position:absolute; top:56px; left:0; right:0; bottom:150px; z-index:2; transition:opacity .22s ease; }
+  #avatarContainer canvas{ display:block; width:100%; height:100%; }
+  .avatar-status{ position:absolute; top:12px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:10px; color:var(--text-dim); text-align:center; z-index:3; }
+  .avatar-error{ color:var(--amber); }
+  .avatar-kind-select{
+    position:absolute; top:58px; left:50%; transform:translateX(-50%); z-index:4;
+    display:flex; border:1px solid var(--line); border-radius:2px; overflow:hidden; background:var(--panel);
+  }
+  .avatar-kind-select button{
+    background:none; border:none; padding:6px 14px; font-family:var(--mono); font-size:10.5px;
+    letter-spacing:.05em; color:var(--text-dim); cursor:pointer; border-right:1px solid var(--line);
+  }
+  .avatar-kind-select button:last-child{ border-right:none; }
+  .avatar-kind-select button.active{ background:var(--core); color:#032027; }
+  .avatar-kind-select button:disabled{ opacity:.4; cursor:progress; }
+  .robot-variant-select{
+    position:absolute; top:96px; left:50%; transform:translateX(-50%); z-index:4;
+    display:none; border:1px solid var(--line); border-radius:2px; overflow:hidden; background:var(--panel);
+  }
+  .robot-variant-select.show{ display:flex; }
+  .robot-variant-select span{ padding:6px 8px 6px 12px; font-family:var(--mono); font-size:9.5px; color:var(--text-dim); align-self:center; }
+  .robot-variant-select button{
+    background:none; border:none; padding:6px 12px; font-family:var(--mono); font-size:10px;
+    color:var(--text-dim); cursor:pointer; border-left:1px solid var(--line);
+  }
+  .robot-variant-select button.active{ background:var(--amber); color:#2b1400; }
+  .robot-variant-select button:disabled{ opacity:.4; cursor:progress; }
+
+  .response-wrap{ width:min(560px, 88vw); text-align:center; position:relative; z-index:3; }
+  #responseText{ font-family:var(--mono); font-size:15px; line-height:1.7; color:var(--text); text-shadow:0 0 10px rgba(111,227,255,.3); min-height:1.7em; }
+  .thinking-line{ font-size:11.5px; color:var(--text-dim); font-style:italic; margin-bottom:8px; cursor:pointer; }
+  #liveCaption{ font-family:var(--mono); font-size:11.5px; color:var(--text-dim); font-style:italic; min-height:14px; margin-top:6px; }
+
+  .dock{ position:absolute; bottom:26px; left:50%; transform:translateX(-50%); z-index:6; width:min(600px, 90vw); }
+  .dock-card{ background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
+  #textInput{ flex:1; background:none; border:none; outline:none; color:var(--text); font-family:var(--sans); font-size:14px; padding:8px 6px; }
+  .icon-btn{ width:36px; height:36px; border-radius:2px; border:1px solid var(--line); background:var(--void); color:var(--text-dim); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .icon-btn:hover{ color:var(--core); border-color:var(--core-dim); }
+  .icon-btn.active{ background:var(--core); color:#032027; }
+  .icon-btn:disabled{ opacity:.35; cursor:not-allowed; }
+  .model-pill{ display:flex; align-items:center; gap:5px; height:36px; padding:0 10px; border-radius:2px; border:1px solid var(--line); background:var(--void); font-family:var(--mono); font-size:10.5px; color:var(--text-dim); cursor:pointer; flex-shrink:0; }
+  .model-pill:hover{ color:var(--core); border-color:var(--core-dim); }
+  .send-btn{ width:36px; height:36px; border-radius:2px; border:none; background:var(--core); color:#032027; font-size:15px; cursor:pointer; flex-shrink:0; }
+  .send-btn:disabled{ opacity:.35; cursor:not-allowed; }
+
+  .popup{ position:absolute; bottom:48px; right:0; width:270px; background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:6px; display:none; z-index:20; box-shadow:0 16px 40px rgba(0,0,0,.5); }
+  .popup.show{ display:block; }
+  .model-opt{ display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:2px; cursor:pointer; }
+  .model-opt:hover{ background:var(--void); }
+  .model-opt .name{ font-family:var(--mono); font-size:12px; color:var(--text); }
+  .model-opt .desc{ font-size:10px; color:var(--text-dim); }
+  .model-opt .check{ color:var(--core); font-size:12px; visibility:hidden; }
+  .model-opt.selected .check{ visibility:visible; }
+  .popup .sep{ height:1px; background:var(--line); margin:6px 4px; }
+  .popup .row{ display:flex; align-items:center; justify-content:space-between; padding:8px 10px; font-family:var(--mono); }
+  .popup .row .label{ font-size:11px; color:var(--text); }
+  .seg-mini{ display:flex; border:1px solid var(--line); border-radius:2px; overflow:hidden; }
+  .seg-mini button{ background:none; border:none; padding:4px 8px; font-size:10px; color:var(--text-dim); cursor:pointer; border-right:1px solid var(--line); font-family:var(--mono); }
+  .seg-mini button:last-child{ border-right:none; }
+  .seg-mini button.active{ background:var(--core); color:#032027; }
+  .popup .footnote{ font-size:9px; color:var(--text-dim); padding:8px 10px 4px; line-height:1.5; font-family:var(--mono); }
+  .switch{ position:relative; width:32px; height:18px; flex-shrink:0; }
+  .switch input{ display:none; }
+  .switch .track{ position:absolute; inset:0; background:var(--line); border-radius:9px; cursor:pointer; }
+  .switch .track::after{ content:""; position:absolute; width:13px; height:13px; border-radius:50%; background:var(--text); top:2.5px; left:2.5px; transition:.2s; }
+  .switch input:checked + .track{ background:var(--core-dim); }
+  .switch input:checked + .track::after{ transform:translateX(14px); background:var(--core); }
+
+  .drawer{ position:absolute; top:0; left:0; bottom:0; width:260px; background:var(--panel); border-right:1px solid var(--line); z-index:15; transform:translateX(-100%); transition:transform .2s ease; display:flex; flex-direction:column; padding:16px 12px; }
+  .drawer.show{ transform:translateX(0); }
+  .drawer h3{ font-family:var(--mono); font-size:11px; letter-spacing:.1em; color:var(--text-dim); margin:6px 8px 12px; }
+  .new-chat-btn{ padding:9px 12px; background:var(--void); border:1px solid var(--line); border-radius:2px; color:var(--text); font-family:var(--mono); font-size:11.5px; cursor:pointer; margin-bottom:10px; text-align:left; }
+  .new-chat-btn:hover{ border-color:var(--core-dim); color:var(--core); }
+  .thread-list{ flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+  .thread-item{ display:flex; justify-content:space-between; gap:6px; padding:8px 10px; border-radius:2px; cursor:pointer; font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+  .thread-item:hover{ background:var(--void); }
+  .thread-item.active{ background:var(--void); color:var(--core); }
+  .thread-item .title{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .thread-item .del{ opacity:0; background:none; border:none; color:var(--text-dim); cursor:pointer; }
+  .thread-item:hover .del{ opacity:1; }
+  .drawer-scrim{ position:absolute; inset:0; background:rgba(0,0,0,.4); z-index:14; display:none; }
+  .drawer-scrim.show{ display:block; }
+
+  #signin{ position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; background:var(--void); padding:24px; }
+  .signin-card{ width:min(380px,90vw); background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:30px 26px; text-align:center; display:flex; flex-direction:column; gap:14px; }
+  .signin-card h1{ font-family:var(--mono); font-size:16px; letter-spacing:.3em; color:var(--core); margin:0; }
+  .signin-card p{ margin:0; font-size:11.5px; color:var(--text-dim); font-family:var(--mono); line-height:1.7; }
+  .signin-card input{ padding:11px 13px; background:var(--void); border:1px solid var(--line); border-radius:2px; color:var(--text); font-family:var(--sans); font-size:14px; text-align:center; outline:none; }
+  .signin-card button{ padding:11px; background:var(--core); color:#032027; border:none; border-radius:2px; font-family:var(--mono); font-size:12px; letter-spacing:.05em; font-weight:600; cursor:pointer; }
+
+  .setup-card{ position:relative; z-index:3; width:min(480px,90vw); background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:20px 22px; text-align:center; display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+  .setup-card p{ margin:0; font-size:11.5px; color:var(--text-dim); font-family:var(--mono); line-height:1.7; }
+  .setup-card select{ padding:9px 10px; background:var(--void); border:1px solid var(--line); border-radius:2px; color:var(--text); font-family:var(--mono); font-size:11px; }
+  .setup-card button{ padding:11px 20px; background:var(--core); color:#032027; border:none; border-radius:2px; font-family:var(--mono); font-size:11.5px; font-weight:600; cursor:pointer; align-self:center; }
+  .setup-card button:disabled{ opacity:.4; cursor:progress; }
+  .setup-progress{ width:100%; height:4px; background:var(--void); border-radius:2px; overflow:hidden; display:none; }
+  .setup-progress .fill{ height:100%; width:0%; background:var(--core); transition:width .2s ease; }
+  .setup-status{ font-size:10.5px; color:var(--text-dim); display:none; font-family:var(--mono); }
+
+  .modal-overlay{ position:fixed; inset:0; z-index:40; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.6); }
+  .modal-overlay.show{ display:flex; }
+  .modal-panel{ width:min(400px,90vw); max-height:80vh; overflow-y:auto; background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:22px 24px; position:relative; }
+  .modal-panel h2{ font-family:var(--mono); font-size:13px; letter-spacing:.15em; color:var(--core); margin:0 0 4px; }
+  .modal-panel .sub{ font-size:11px; color:var(--text-dim); margin:0 0 16px; font-family:var(--mono); }
+  .modal-close{ position:absolute; top:16px; right:18px; background:none; border:none; font-size:18px; color:var(--text-dim); cursor:pointer; }
+  .setting-row{ display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line); font-family:var(--mono); font-size:12px; }
+  .setting-row:last-of-type{ border-bottom:none; }
+  .setting-row .desc{ font-size:10px; color:var(--text-dim); margin-top:2px; }
+  .modal-action{ width:100%; margin-top:10px; padding:10px; background:none; border:1px solid var(--line); border-radius:2px; font-family:var(--mono); font-size:11.5px; cursor:pointer; color:var(--text); }
+  .modal-action:hover{ border-color:var(--core-dim); color:var(--core); }
+  .modal-action.danger:hover{ border-color:var(--amber); color:var(--amber); }
+  .help-steps{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px; }
+  .help-steps li{ display:flex; gap:10px; font-size:12px; line-height:1.6; font-family:var(--mono); }
+  .help-steps .n{ color:var(--core); flex-shrink:0; }
+  .help-steps .d{ font-size:10.5px; color:var(--text-dim); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="frame-corner tl"></div><div class="frame-corner tr"></div>
+  <div class="frame-corner bl"></div><div class="frame-corner br"></div>
+
+  <div class="topbar">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <button class="icon-btn-sm" id="drawerToggle" title="Chat history">☰</button>
+      <div class="brand">ARIA<span class="state"><span class="dot" id="stateDot"></span><span id="stateText">OFFLINE</span></span></div>
+    </div>
+    <div class="top-right">
+      <button class="icon-btn-sm" id="helpIconBtn" title="How to use">?</button>
+      <button class="icon-btn-sm" id="settingsIconBtn" title="Settings">⚙</button>
+      <div class="account-chip">
+        <button class="chip-btn" id="profileBtn"><span id="avatarLetter">?</span>&nbsp;<span id="profileName">guest</span>&nbsp;· FREE ⌄</button>
+        <div class="account-menu" id="accountMenu"><button id="menuSignOut">Sign out</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer-scrim" id="drawerScrim"></div>
+  <div class="drawer" id="drawer">
+    <h3>CHATS</h3>
+    <button class="new-chat-btn" id="newChatBtn">+ New chat</button>
+    <div class="thread-list" id="threadList"></div>
+  </div>
+
+  <div id="avatarContainer"></div>
+  <div class="avatar-status" id="avatarStatus"></div>
+  <div class="avatar-kind-select" id="avatarKindSelect">
+    <button data-kind="female">Female</button>
+    <button data-kind="male">Male</button>
+    <button data-kind="robot">Robot</button>
+  </div>
+  <div class="robot-variant-select" id="robotVariantSelect">
+    <span>Robot style:</span>
+    <button data-variant="male">Male</button>
+    <button data-variant="female">Female</button>
+  </div>
+
+  <div class="stage">
+    <div class="setup-card" id="setupCard" style="display:none;">
+      <p>ARIA runs a free language model entirely on-device via WebGPU — no server, no cost. First time
+         only: pick a starting tier and it downloads once, cached after. The 3D avatar loads separately
+         (a small free sample model, a few MB).</p>
+      <select id="setupModelSelect">
+        <option value="fast">Fast — 1B, ~0.9GB</option>
+        <option value="balanced" selected>Balanced — 3.8B, ~2.2GB (recommended)</option>
+        <option value="max">Max — 7B, ~4.8GB (needs real disk space)</option>
+      </select>
+      <button id="setupBtn">INITIALIZE CORE</button>
+      <div class="setup-progress" id="setupProgress"><div class="fill" id="setupProgressFill"></div></div>
+      <div class="setup-status" id="setupStatus"></div>
+    </div>
+
+    <div class="response-wrap" id="responseWrap" style="display:none;">
+      <div class="thinking-line" id="thinkingLine" style="display:none;"></div>
+      <div id="responseText">Standing by.</div>
+      <div id="liveCaption"></div>
+    </div>
+  </div>
+
+  <div class="dock" id="dock" style="display:none;">
+    <div class="dock-card">
+      <button class="icon-btn" id="micBtn" title="Push to talk">🎙</button>
+      <input id="textInput" type="text" placeholder="Speak or type a command…" />
+      <div style="position:relative;">
+        <button class="model-pill" id="modelBtn">BALANCED ⌄</button>
+        <div class="popup" id="modelPopup"></div>
+      </div>
+      <button class="send-btn" id="sendBtn">↑</button>
+    </div>
+  </div>
+</div>
+
+<div id="signin">
+  <div class="signin-card">
+    <h1>A R I A</h1>
+    <p>free · on-device · no server, no cost, nothing uploaded. a name only labels
+       your local data on this browser — no password, no real account.</p>
+    <input id="nameInput" type="text" placeholder="Enter a name to continue…" maxlength="24" autocomplete="off" />
+    <button id="signInBtn">CONTINUE — FREE</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal-panel">
+    <button class="modal-close" id="closeSettings">&times;</button>
+    <h2>SETTINGS</h2>
+    <p class="sub">signed in as <span id="settingsName">guest</span> · free</p>
+    <div class="setting-row"><div>Voice replies<div class="desc">Speak ARIA's answers aloud</div></div>
+      <label class="switch"><input type="checkbox" id="voiceToggle" checked /><span class="track"></span></label></div>
+    <button class="modal-action danger" id="clearThreadsBtn">Clear all chats</button>
+    <button class="modal-action danger" id="settingsSignOut">Sign out</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="helpModal">
+  <div class="modal-panel">
+    <button class="modal-close" id="closeHelp">&times;</button>
+    <h2>HOW ARIA WORKS</h2>
+    <p class="sub">the honest 30-second version</p>
+    <ol class="help-steps">
+      <li><span class="n">1.</span><span>Sign in with any name.<div class="d">Local only — free, no password.</div></span></li>
+      <li><span class="n">2.</span><span>First visit: initialize the core.<div class="d">Downloads a free model once, cached after. The 3D avatar loads alongside it.</div></span></li>
+      <li><span class="n">3.</span><span>Talk or type.<div class="d">Mic = push-to-talk. Watch the avatar react — listening, thinking, talking.</div></span></li>
+      <li><span class="n">4.</span><span>Drag to orbit, scroll to zoom.<div class="d">The avatar view responds to mouse/touch like a real 3D viewport.</div></span></li>
+      <li><span class="n">5.</span><span>☰ opens saved chats.<div class="d">Every conversation is remembered per profile, on this device.</div></span></li>
+    </ol>
+    <button class="modal-action" id="closeHelpBtn" style="margin-top:16px;">Got it</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"
+  }
+}
+</script>
+<script type="module">
+/*
+  ARIA — Avatar Interface
+  ---------------------------------------------------------------
+  A real 3D humanoid (VRM format) rendered with Three.js, replacing the
+  flat hex-reactor visual. Same free foundation as every version before:
+  WebLLM (LLM fully in-browser via WebGPU) for the brain, Web Speech API
+  for voice, and now Three.js + @pixiv/three-vrm (both free/open-source)
+  for the body.
+
+  THE MODELS: three real, freely-licensed VRM avatars (Female/Male/Robot),
+  each loaded via jsDelivr's GitHub CDN mirror — no binaries bundled here.
+  If any link ever breaks or you want a different look, see the README
+  for how to swap entries in the AVATAR_SOURCES map below.
+
+  Sections:
+    [AVATAR]   Three.js scene, VRM load + fallback, pose/expression driver
+    [ACCOUNT]  local profile system (unchanged from prior versions)
+    [MODEL]    tier lineup + swap + effort/thinking prompting
+    [THREADS]  saved conversations, drawer list
+    [VOICE]    push-to-talk mic
+    [CHAT]     send / stream / render
+*/
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+
+const el = id => document.getElementById(id);
+const qs = (r, s) => r.querySelector(s);
+
+const stateDot = el("stateDot"), stateText = el("stateText");
+const drawerToggle = el("drawerToggle"), drawer = el("drawer"), drawerScrim = el("drawerScrim");
+const newChatBtn = el("newChatBtn"), threadList = el("threadList");
+const signinScreen = el("signin"), nameInput = el("nameInput"), signInBtn = el("signInBtn");
+const profileBtn = el("profileBtn"), accountMenu = el("accountMenu"), avatarLetter = el("avatarLetter"), profileName = el("profileName");
+const menuSignOut = el("menuSignOut");
+const helpIconBtn = el("helpIconBtn"), helpModal = el("helpModal"), closeHelp = el("closeHelp"), closeHelpBtn = el("closeHelpBtn");
+const settingsIconBtn = el("settingsIconBtn"), settingsModal = el("settingsModal"), closeSettings = el("closeSettings"), settingsName = el("settingsName");
+const voiceToggle = el("voiceToggle"), clearThreadsBtn = el("clearThreadsBtn"), settingsSignOut = el("settingsSignOut");
+const setupCard = el("setupCard"), setupModelSelect = el("setupModelSelect"), setupBtn = el("setupBtn");
+const setupProgress = el("setupProgress"), setupProgressFill = el("setupProgressFill"), setupStatus = el("setupStatus");
+const responseWrap = el("responseWrap"), responseText = el("responseText"), thinkingLine = el("thinkingLine"), liveCaption = el("liveCaption");
+const dock = el("dock"), textInput = el("textInput"), micBtn = el("micBtn"), sendBtn = el("sendBtn");
+const modelBtn = el("modelBtn"), modelPopup = el("modelPopup");
+const avatarContainer = el("avatarContainer"), avatarStatus = el("avatarStatus"), avatarKindSelect = el("avatarKindSelect"), robotVariantSelect = el("robotVariantSelect");
+
+let engine = null, busy = false, voiceMuted = false;
+let mode = "idle"; // idle | listening | thinking | speaking
+
+// ================= [AVATAR] Three.js + VRM, with 4 swappable rigs =================
+// Using the exact URLs provided, unmodified, per explicit instruction.
+// Honest flag: I could confirm AvatarSample_B/C are real CC0 VRoid
+// samples in general, but not specifically at this "vroid/stable" path
+// in this exact repo. The automatic placeholder-on-failure fallback
+// (unchanged, below) covers this either way — if a URL is wrong, you'll
+// see a clear on-screen note and a built-in stand-in, not a broken page.
+const AVATAR_SOURCES = {
+  female:        { url: "https://raw.githubusercontent.com/madjin/vrm-samples/master/vroid/stable/AvatarSample_B.vrm", note: "pixiv/three-vrm official example model, VRM Public License 1.0" },
+  male:          { url: "https://raw.githubusercontent.com/madjin/vrm-samples/master/vroid/stable/AvatarSample_C.vrm", note: "the official VRM spec's sample model, Seed-san — confirmed working" },
+  "robot-male":   { url: "https://cdn.jsdelivr.net/gh/vrm-c/vrm-specification@master/samples/Seed-san/vrm/Seed-san.vrm", note: "Seed-san with a chrome finish applied", chrome: true },
+  "robot-female": { url: "https://cdn.jsdelivr.net/gh/pixiv/three-vrm@release/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm", note: "the Female model with a chrome finish applied", chrome: true },
+};
+
+let renderer, scene, camera, controls, clock;
+let displayCategory = "female"; // female | male | robot — drives the top row's highlight + sub-selector visibility
+let robotVariant = "male";      // male | female — which base character Robot uses
+let currentRig = null;          // unified descriptor, see buildProceduralRig / loadVRMForKind
+let switchingAvatar = false;
+let blinkTimer = 0, nextBlink = 2 + Math.random() * 3;
+
+// ================= [POSE] the actual root-cause fix =================
+// VRM's bind pose (rest skeleton) is always a T-pose — arms straight out
+// to the sides — by spec. Every VRM viewer is expected to pose the model
+// into a natural stance itself; nothing here was doing that. The result:
+// the avatar has been standing in a scarecrow T-pose the whole time, and
+// every gesture (wave, thinking, idle) was calculated as a small rotation
+// *from that T-pose*, not from a natural arms-down stance — which is
+// exactly why a "wave hello" read as a small downward flick instead of a
+// raised hand, and why other gestures looked subtly wrong too. This
+// constant brings both upper arms down from horizontal (T-pose, 0) to
+// roughly vertical at the sides; everything else (idle rest, thinking,
+// waving, laughing) is now expressed as a delta from THIS baseline.
+const REST_ARM_Z = -1.5; // right arm; the left arm mirrors with the opposite sign
+
+// Not every VRM tags its mouth blend shapes the same way — VRM 1.0 uses
+// "aa/ih/ou/ee/oh", VRM 0.0 models sometimes only expose the raw
+// single-letter names ("a/i/u/e/o"). The previous approach pre-checked
+// which names a model "has" via expressionManager.getExpression() before
+// using them — that pre-check method may not actually exist in this
+// three-vrm build, which would silently make the check always fail and
+// mouth animation never fire at all, on any model. Fixed by dropping the
+// pre-check entirely: every frame, just try setValue() directly on every
+// candidate name, wrapped so an unrecognized name can't throw. setValue
+// is the one core method every version of this library is expected to
+// have, so this doesn't depend on a second, less-certain API existing.
+const MOUTH_SHAPE_CANDIDATES = ["aa", "ih", "ou", "ee", "oh", "a", "i", "u", "e", "o"];
+let talkPhase = 0, talkUntil = 0;
+
+function initAvatarScene() {
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(28, avatarContainer.clientWidth / avatarContainer.clientHeight, 0.1, 20);
+  camera.position.set(0, 1.36, 1.7);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  resizeRenderer();
+  avatarContainer.appendChild(renderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 1.3, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 0.8; controls.maxDistance = 3.5;
+  controls.update();
+
+  const key = new THREE.DirectionalLight(0xbfe8ff, 2.2); key.position.set(1, 2, 1.5);
+  const fill = new THREE.DirectionalLight(0x6fe3ff, 0.5); fill.position.set(-1.5, 0.5, -1);
+  const ambient = new THREE.HemisphereLight(0x223344, 0x05080d, 0.7);
+  scene.add(key, fill, ambient);
+
+  // Cheap fake-IBL: gives every PBR material (VRM skin/hair/cloth and our
+  // procedural rigs alike) soft realistic reflections instead of looking
+  // flat and unlit — a real, low-cost realism upgrade over plain lights.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
+
+  clock = new THREE.Clock();
+  window.addEventListener("resize", resizeRenderer);
+  renderer.setAnimationLoop(renderLoop);
+  // No rig is loaded yet here on purpose — which one loads depends on the
+  // signed-in profile's saved preference, resolved later in boot().
+}
+function resizeRenderer() {
+  const w = avatarContainer.clientWidth, h = avatarContainer.clientHeight;
+  if (!w || !h || !renderer) return;
+  renderer.setSize(w, h);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+
+function avatarButtonsEnabled(enabled) {
+  avatarKindSelect.querySelectorAll("button").forEach(b => b.disabled = !enabled);
+  robotVariantSelect.querySelectorAll("button").forEach(b => b.disabled = !enabled);
+}
+function updateAvatarKindButtons() {
+  avatarKindSelect.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.kind === displayCategory));
+  robotVariantSelect.classList.toggle("show", displayCategory === "robot");
+}
+function updateRobotVariantButtons() {
+  robotVariantSelect.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.variant === robotVariant));
+}
+function resolveKind() { return displayCategory === "robot" ? `robot-${robotVariant}` : displayCategory; }
+
+function disposeCurrentRig() {
+  if (!currentRig) return;
+  scene.remove(currentRig.root);
+  const texSlots = ["map", "normalMap", "emissiveMap", "metalnessMap", "roughnessMap", "aoMap", "alphaMap"];
+  currentRig.root.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+      texSlots.forEach(slot => m[slot]?.dispose());
+      m.dispose();
+    });
+  });
+  currentRig = null;
+}
+
+function setDisplayCategory(category, { persist = true } = {}) {
+  if (switchingAvatar) return;
+  displayCategory = category;
+  updateAvatarKindButtons();
+  if (persist) localStorage.setItem(scopedKey("avatar_category_v1"), category);
+  loadCurrentSelection();
+}
+function setRobotVariant(variant, { persist = true } = {}) {
+  if (switchingAvatar) return;
+  robotVariant = variant;
+  updateRobotVariantButtons();
+  if (persist) localStorage.setItem(scopedKey("avatar_robot_variant_v1"), variant);
+  if (displayCategory === "robot") loadCurrentSelection();
+}
+function loadCurrentSelection() {
+  switchingAvatar = true;
+  avatarButtonsEnabled(false);
+  avatarContainer.style.opacity = "0";
+  disposeCurrentRig();
+  avatarStatus.textContent = "";
+  const kind = resolveKind();
+  if (AVATAR_SOURCES[kind]) loadVRMForKind(kind); else buildProceduralRig(kind); // safety net only; all 4 kinds have real sources now
+}
+
+// Turns a normal character's materials chrome/metallic — used for the two
+// Robot sub-variants so they read as "robot" without needing a separate,
+// unverified robot-specific VRM file.
+function applyRobotFinish(root) {
+  root.traverse(o => {
+    if (!o.isMesh || !o.material) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+      m.color?.set(0x8fa6b0);
+      m.metalness = 0.85;
+      m.roughness = 0.22;
+      if (m.emissive) { m.emissive.set(0x1c4a56); m.emissiveIntensity = 0.25; }
+    });
+  });
+}
+
+function loadVRMForKind(kind) {
+  const source = AVATAR_SOURCES[kind];
+  avatarStatus.textContent = "loading avatar…";
+  const loader = new GLTFLoader();
+  loader.crossOrigin = "anonymous";
+  loader.register(parser => new VRMLoaderPlugin(parser));
+  loader.load(
+    source.url,
+    gltf => {
+      const loadedVrm = gltf.userData.vrm;
+      VRMUtils.removeUnnecessaryVertices(gltf.scene);
+      VRMUtils.combineSkeletons(gltf.scene);
+      // VRM 0.0 models (older format, e.g. Seed-san) face the opposite
+      // direction from VRM 1.0 models by spec convention — without this,
+      // they load turned 180°, showing their back instead of their front.
+      // three-vrm ships a purpose-built fix for exactly this mismatch.
+      if (loadedVrm.meta?.metaVersion === "0") VRMUtils.rotateVRM0(loadedVrm);
+      loadedVrm.scene.traverse(o => { o.frustumCulled = false; });
+      if (source.chrome) applyRobotFinish(loadedVrm.scene);
+      scene.add(loadedVrm.scene);
+      const h = loadedVrm.humanoid;
+      const armUpper = h?.getNormalizedBoneNode("rightUpperArm"), armUpperL = h?.getNormalizedBoneNode("leftUpperArm");
+      // Bring both arms down from the raw T-pose bind position to a
+      // natural standing rest — see [POSE] below for why this matters.
+      if (armUpper) armUpper.rotation.z = REST_ARM_Z;
+      if (armUpperL) armUpperL.rotation.z = -REST_ARM_Z;
+      currentRig = {
+        kind, isVRM: true, root: loadedVrm.scene, vrmInstance: loadedVrm,
+        head: h?.getNormalizedBoneNode("head"), spine: h?.getNormalizedBoneNode("spine"),
+        armUpper, armLower: h?.getNormalizedBoneNode("rightLowerArm"),
+        armUpperL, armLowerL: h?.getNormalizedBoneNode("leftLowerArm"),
+        jaw: h?.getNormalizedBoneNode("jaw"), // not every VRM rigs a separate jaw bone — driveMouth checks before using it
+      };
+      avatarStatus.textContent = "";
+      switchingAvatar = false; avatarButtonsEnabled(true);
+      avatarContainer.style.opacity = "1";
+    },
+    progress => { if (progress.total) avatarStatus.textContent = `loading ${kind}… ${Math.round(100 * progress.loaded / progress.total)}%`; },
+    error => {
+      console.error(`${kind} VRM load failed, falling back to a built-in figure:`, error);
+      avatarStatus.innerHTML = `<span class="avatar-error">the real 3D model for "${kind}" failed to load — showing a built-in stand-in instead (check your connection, or see README)</span>`;
+      buildProceduralRig(kind.startsWith("robot") ? "robot" : kind); // reliable, zero-network stand-in; re-enables buttons itself
+    }
+  );
+}
+
+// Original, reliable, zero-dependency humanoid rigs — automatic fallback
+// only, used if a given kind's real VRM fails to load.
+function buildProceduralRig(style) {
+  const root = new THREE.Group();
+  const isRobot = style === "robot";
+  const skinMat = new THREE.MeshStandardMaterial({ color: isRobot ? 0x2a3038 : 0xd9a679, metalness: isRobot ? 0.6 : 0.05, roughness: isRobot ? 0.35 : 0.7 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: isRobot ? 0x6fe3ff : 0x33475c, emissive: isRobot ? 0x2ea8c4 : 0x000000, emissiveIntensity: isRobot ? 0.6 : 0, metalness: 0.3, roughness: 0.5 });
+
+  const headPivot = new THREE.Group(); headPivot.position.set(0, 1.5, 0);
+  const headMesh = new THREE.Mesh(isRobot ? new THREE.BoxGeometry(0.22, 0.24, 0.22) : new THREE.SphereGeometry(0.13, 24, 24), skinMat);
+  headPivot.add(headMesh);
+
+  let eyeL, eyeR;
+  if (isRobot) {
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.02), accentMat);
+    visor.position.set(0, 0.02, 0.11);
+    headPivot.add(visor);
+    eyeL = eyeR = visor;
+  } else {
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+    eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), eyeMat); eyeL.position.set(-0.045, 0, 0.12);
+    eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), eyeMat); eyeR.position.set(0.045, 0, 0.12);
+    headPivot.add(eyeL, eyeR);
+  }
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.025, 0.02), isRobot ? accentMat : skinMat);
+  jaw.position.set(0, -0.09, 0.11);
+  headPivot.add(jaw);
+  root.add(headPivot);
+
+  const spinePivot = new THREE.Group(); spinePivot.position.set(0, 1.25, 0);
+  const torso = new THREE.Mesh(isRobot ? new THREE.BoxGeometry(0.32, 0.42, 0.2) : new THREE.CapsuleGeometry(0.16, 0.38, 4, 12), isRobot ? skinMat : accentMat);
+  spinePivot.add(torso);
+  root.add(spinePivot);
+
+  const armGeo = isRobot ? new THREE.BoxGeometry(0.07, 0.35, 0.07) : new THREE.CapsuleGeometry(0.045, 0.32, 4, 8);
+  const armMat = isRobot ? accentMat : skinMat;
+
+  const armUpperPivot = new THREE.Group(); armUpperPivot.position.set(0.24, 1.4, 0);
+  const armUpperMesh = new THREE.Mesh(armGeo, armMat); armUpperMesh.position.y = -0.16;
+  armUpperPivot.add(armUpperMesh);
+  const armLowerPivot = new THREE.Group(); armLowerPivot.position.set(0, -0.32, 0);
+  const armLowerMesh = new THREE.Mesh(armGeo, armMat); armLowerMesh.position.y = -0.14;
+  armLowerPivot.add(armLowerMesh);
+  armUpperPivot.add(armLowerPivot);
+  root.add(armUpperPivot);
+
+  // Mirror of the right arm — gives the left side the same two-joint
+  // pivot structure, so waves/gestures can use either hand, not just one.
+  const armUpperPivotL = new THREE.Group(); armUpperPivotL.position.set(-0.24, 1.4, 0);
+  const armUpperMeshL = new THREE.Mesh(armGeo, armMat); armUpperMeshL.position.y = -0.16;
+  armUpperPivotL.add(armUpperMeshL);
+  const armLowerPivotL = new THREE.Group(); armLowerPivotL.position.set(0, -0.32, 0);
+  const armLowerMeshL = new THREE.Mesh(armGeo, armMat); armLowerMeshL.position.y = -0.14;
+  armLowerPivotL.add(armLowerMeshL);
+  armUpperPivotL.add(armLowerPivotL);
+  armUpperPivotL.rotation.z = 0.12; // resting arms-slightly-out pose, mirrored from the old static left arm
+  root.add(armUpperPivotL);
+
+  scene.add(root);
+  currentRig = { kind: style, isVRM: false, root, head: headPivot, spine: spinePivot, armUpper: armUpperPivot, armLower: armLowerPivot, armUpperL: armUpperPivotL, armLowerL: armLowerPivotL, jaw, eyeL, eyeR };
+  avatarStatus.textContent = "";
+  switchingAvatar = false; avatarButtonsEnabled(true);
+  avatarContainer.style.opacity = "1";
+}
+
+function pulseBlink(dt, r) {
+  blinkTimer += dt;
+  const doingBlink = blinkTimer > nextBlink && blinkTimer < nextBlink + 0.15;
+  if (blinkTimer > nextBlink + 0.15) { blinkTimer = 0; nextBlink = 2 + Math.random() * 3; }
+  if (r.isVRM) { if (r.vrmInstance.expressionManager) r.vrmInstance.expressionManager.setValue("blink", doingBlink ? 1 : 0); }
+  else if (r.eyeL && r.eyeR) { const s = doingBlink ? 0.08 : 1; r.eyeL.scale.y = s; r.eyeR.scale.y = s; }
+}
+function driveMouth(dt, t, r) {
+  if (mode === "speaking" && t < talkUntil) {
+    const pace = currentTier === "fast" ? 10.5 : currentTier === "max" ? 7.5 : 9;
+    talkPhase += dt * pace;
+    const amp = Math.abs(Math.sin(talkPhase));
+    if (r.isVRM) {
+      // Try every candidate mouth-shape name directly, every frame — no
+      // pre-check. Whichever names this specific model actually has will
+      // respond; the rest are expected to safely no-op.
+      if (r.vrmInstance.expressionManager) {
+        const mgr = r.vrmInstance.expressionManager;
+        MOUTH_SHAPE_CANDIDATES.forEach((s, i) => {
+          try { mgr.setValue(s, i === Math.floor(talkPhase) % MOUTH_SHAPE_CANDIDATES.length ? amp * 0.8 : 0); } catch (e) {}
+        });
+      }
+      // Real jaw-bone rotation too, when a model rigs one — layers on
+      // top of blend shapes rather than replacing them.
+      if (r.jaw) r.jaw.rotation.x = amp * 0.32;
+      // Guaranteed, clearly visible talk motion — not a last resort, this
+      // always runs during speech regardless of whether the above did
+      // anything on this specific model. A natural head bob synced to
+      // the same rhythm as the (attempted) mouth movement, sized to be
+      // unmistakable as "talking" rather than a barely-there wobble.
+      if (r.head) r.head.rotation.x = Math.sin(talkPhase * 0.55) * 0.025 + amp * 0.05;
+    } else if (r.jaw) { r.jaw.scale.y = 1 + amp * 1.4; }
+  } else {
+    if (r.isVRM) {
+      if (r.vrmInstance.expressionManager) {
+        const mgr = r.vrmInstance.expressionManager;
+        MOUTH_SHAPE_CANDIDATES.forEach(s => { try { mgr.setValue(s, 0); } catch (e) {} });
+      }
+      if (r.jaw) r.jaw.rotation.x = THREE.MathUtils.lerp(r.jaw.rotation.x, 0, 0.2);
+    } else if (r.jaw) { r.jaw.scale.y = 1; }
+  }
+}
+
+// ================= [MOOD] emotional expressions =================
+// Real, standard VRM expression presets — confirmed via VRM tooling docs:
+// neutral, happy, angry, sad, relaxed, surprised. "Shy" isn't a standard
+// preset, so it tries common custom names some VRoid avatars ship
+// ("blush"/"Blush") and falls back to "relaxed" (a soft, downcast look)
+// if the model doesn't have one — safe either way, wrapped so an unknown
+// expression name never throws.
+const MOOD_EXPRESSIONS = {
+  happy: ["happy"], angry: ["angry"], sad: ["sad"], relaxed: ["relaxed"], surprised: ["surprised"],
+  shy: ["blush", "Blush", "relaxed"],
+};
+let currentMood = null, moodWeight = 0, appliedMood = null;
+function setMood(name, weight = 0.7) { currentMood = name; moodWeight = weight; }
+function applyMoodValue(r, name, weight) {
+  if (!r.isVRM || !r.vrmInstance.expressionManager) return;
+  (MOOD_EXPRESSIONS[name] || []).forEach(n => { try { r.vrmInstance.expressionManager.setValue(n, weight); } catch (e) {} });
+}
+function clearAllMoods(r) {
+  if (!r.isVRM || !r.vrmInstance.expressionManager) return;
+  Object.values(MOOD_EXPRESSIONS).flat().forEach(n => { try { r.vrmInstance.expressionManager.setValue(n, 0); } catch (e) {} });
+}
+function driveMood(dt, r) {
+  if (currentMood !== appliedMood && appliedMood) applyMoodValue(r, appliedMood, 0); // clear the previous mood before switching — it was being left stuck active
+  appliedMood = currentMood;
+  if (!currentMood) return;
+  applyMoodValue(r, currentMood, moodWeight);
+  moodWeight = Math.max(0, moodWeight - dt * 0.45);
+  if (moodWeight <= 0) { clearAllMoods(r); currentMood = null; appliedMood = null; }
+}
+
+// ================= [ACTIONS] richer body behavior =================
+// A small library of discrete, timed actions layered on top of the base
+// idle/listening/thinking/speaking pose — this is what actually answers
+// "rotate", "front/backward", "switching", "much more into it": the
+// avatar now does more than hold one of four static poses.
+let action = null;       // { type, t, duration, protected, hand }
+let idleTimer = 0, nextIdleAction = 6 + Math.random() * 6;
+let leanZ = 0;            // forward/back lean, driven while speaking
+
+function queueAction(type, duration, opts = {}) { action = { type, t: 0, duration, ...opts }; }
+
+function driveActions(dt, t, r) {
+  // Idle-only spontaneous flourishes: a glance to the side, a weight
+  // shift, or a small nod — picked at random on a loose timer so the
+  // avatar doesn't just stand there between turns. These are NOT marked
+  // "protected", so a real interaction cuts them short cleanly.
+  // (A full-body turntable spin used to be in this pool — removed: in
+  // this close bust-height framing it read as the head spinning around
+  // on its own, not a charming "showing you every angle" flourish.)
+  if (!action) {
+    if (mode === "idle") {
+      idleTimer += dt;
+      if (idleTimer > nextIdleAction) {
+        idleTimer = 0; nextIdleAction = 9 + Math.random() * 12;
+        const pool = ["lookAround", "weightShift", "nod"];
+        const picked = pool[Math.floor(Math.random() * pool.length)];
+        queueAction(picked, 1.6);
+      }
+    } else {
+      idleTimer = 0;
+    }
+  }
+
+  if (action) {
+    // Content-driven reactions (greeting wave, laugh, shy, nod, shake —
+    // anything queued with `protected: true` from reactToText) always
+    // play out in full, since they're a direct response to something
+    // real that was just said. Only cosmetic idle flourishes get cut
+    // short the moment a real interaction starts.
+    if (!action.protected && mode !== "idle") {
+      r.root.position.x = 0; // don't leave a stuck partial weight-shift
+      action = null;
+    } else {
+      action.t += dt;
+      const p = Math.min(1, action.t / action.duration);
+      const leftHand = action.hand === "left";
+      switch (action.type) {
+        case "lookAround":
+          if (r.head) r.head.rotation.y = Math.sin(p * Math.PI) * 0.4;
+          break;
+        case "weightShift":
+          r.root.position.x = Math.sin(p * Math.PI) * 0.035;
+          break;
+        case "nod":
+          if (r.head) r.head.rotation.x = Math.sin(p * Math.PI * 3) * 0.14;
+          break;
+        case "shake":
+          if (r.head) r.head.rotation.y = Math.sin(p * Math.PI * 3) * 0.16;
+          break;
+        case "wave": {
+          // One hand only — left or right, chosen when the gesture was
+          // queued (reactToText randomizes this on a real "hello"). The
+          // raise magnitude differs by rig because VRM and the procedural
+          // fallback measure "arm down" from different zero-points (see
+          // REST_ARM_Z above) — this is what was making the wave swing
+          // toward the ground instead of raising the hand to greet.
+          const up = leftHand ? r.armUpperL : r.armUpper;
+          const low = leftHand ? r.armLowerL : r.armLower;
+          const sign = leftHand ? 1 : -1;
+          const raise = r.isVRM ? 0.3 : 1.7; // VRM: relative to REST_ARM_Z; procedural: relative to its own zero-as-down
+          if (up) up.rotation.z = sign * raise + Math.sin(p * Math.PI * 5) * 0.22 * sign;
+          if (low) low.rotation.y = sign * -0.5;
+          break;
+        }
+        case "laugh": {
+          // Head tips back with the rhythm of laughing; both arms lift
+          // slightly, like an actual "haha" reaction rather than a still pose.
+          if (r.head) r.head.rotation.x = -0.06 + Math.sin(p * Math.PI * 7) * 0.13;
+          const liftR = r.isVRM ? -1.15 : -0.35, liftL = r.isVRM ? 1.15 : 0.35;
+          if (r.armUpper) r.armUpper.rotation.z = THREE.MathUtils.lerp(r.armUpper.rotation.z, liftR, 0.15);
+          if (r.armUpperL) r.armUpperL.rotation.z = THREE.MathUtils.lerp(r.armUpperL.rotation.z, liftL, 0.15);
+          break;
+        }
+        case "shy":
+          // Head dips and turns slightly away — classic bashful body
+          // language — paired with the "shy" mood (blush/relaxed) below.
+          if (r.head) {
+            r.head.rotation.x = THREE.MathUtils.lerp(r.head.rotation.x, 0.14, 0.08);
+            r.head.rotation.y = THREE.MathUtils.lerp(r.head.rotation.y, leftHand ? -0.18 : 0.18, 0.08);
+          }
+          break;
+      }
+      if (p >= 1) {
+        if (action.type === "weightShift") r.root.position.x = 0;
+        action = null;
+      }
+    }
+  }
+
+  // Literal forward/backward motion: a subtle lean toward the viewer while
+  // ARIA is speaking, easing back to neutral otherwise.
+  const leanTarget = mode === "speaking" ? -0.04 : 0;
+  leanZ = THREE.MathUtils.lerp(leanZ, leanTarget, 0.06);
+  r.root.position.z = leanZ;
+}
+
+function driveAvatar(dt, t) {
+  const r = currentRig;
+  if (!r) return;
+
+  if (r.spine) r.spine.rotation.z = Math.sin(t * 1.1) * 0.012;
+  pulseBlink(dt, r);
+
+  if (mode === "listening" && r.head) {
+    r.head.rotation.x = THREE.MathUtils.lerp(r.head.rotation.x, -0.06, 0.08);
+    r.head.rotation.y = THREE.MathUtils.lerp(r.head.rotation.y, Math.sin(t * 0.6) * 0.05, 0.08);
+  } else if (mode === "thinking" && r.head) {
+    // Depth/speed reflect the tier actually generating right now — this
+    // is a real signal, not decoration: Max genuinely takes longer per
+    // token, so its pose settles slower and leans deeper; Fast is a
+    // quick, light tilt matching how briefly it actually "thinks."
+    const tilt = currentTier === "max" ? 0.17 : currentTier === "fast" ? 0.07 : 0.12;
+    const settle = currentTier === "max" ? 0.04 : currentTier === "fast" ? 0.09 : 0.06;
+    r.head.rotation.x = THREE.MathUtils.lerp(r.head.rotation.x, tilt, settle);
+    r.head.rotation.z = THREE.MathUtils.lerp(r.head.rotation.z, tilt * 0.85, settle);
+    if (r.armUpper) r.armUpper.rotation.z = THREE.MathUtils.lerp(r.armUpper.rotation.z, r.isVRM ? -0.85 : -0.9, settle);
+    if (r.armLower) r.armLower.rotation.y = THREE.MathUtils.lerp(r.armLower.rotation.y, -1.3, settle);
+  } else {
+    if (r.head) {
+      r.head.rotation.x = THREE.MathUtils.lerp(r.head.rotation.x, Math.sin(t * 0.3) * 0.03, 0.05);
+      r.head.rotation.y = THREE.MathUtils.lerp(r.head.rotation.y, Math.sin(t * 0.22) * 0.08, 0.05);
+      r.head.rotation.z = THREE.MathUtils.lerp(r.head.rotation.z, 0, 0.05);
+    }
+    if (r.armUpper) r.armUpper.rotation.z = THREE.MathUtils.lerp(r.armUpper.rotation.z, r.isVRM ? REST_ARM_Z : 0, 0.05);
+    if (r.armLower) r.armLower.rotation.y = THREE.MathUtils.lerp(r.armLower.rotation.y, 0, 0.05);
+    // Left arm relaxes back to its own resting pose too — without this it
+    // would stay frozen wherever the last wave/laugh gesture left it.
+    if (r.armUpperL) r.armUpperL.rotation.z = THREE.MathUtils.lerp(r.armUpperL.rotation.z, r.isVRM ? -REST_ARM_Z : 0.12, 0.05);
+    if (r.armLowerL) r.armLowerL.rotation.y = THREE.MathUtils.lerp(r.armLowerL.rotation.y, 0, 0.05);
+  }
+
+  driveMouth(dt, t, r);
+  driveActions(dt, t, r);
+  driveMood(dt, r);
+
+  if (r.isVRM) r.vrmInstance.update(dt);
+  else r.root.position.y = Math.sin(t * 1.4) * 0.01; // subtle idle bob for procedural rigs
+}
+function triggerTalk(durationSec) { talkUntil = clock.getElapsedTime() + durationSec; }
+
+// Picks a reaction from real text — either what the user just typed/said,
+// or what ARIA just answered. Same honest category as the task-router
+// classifier: fast, transparent keyword matching, not claiming to
+// understand meaning or actual emotion. `source` is "user" or "aria" so
+// a couple of triggers (compliments, jokes) can be scoped to whichever
+// side makes sense — a compliment about ARIA should make ARIA shy, not
+// the other way around.
+const GREETING_WORDS   = ["hello", "hi", "hey", "welcome", "greetings", "good morning", "good afternoon", "good evening"];
+const AFFIRM_WORDS     = ["yes", "sure", "of course", "certainly", "absolutely", "correct", "exactly", "great question"];
+const NEGATIVE_WORDS   = ["no,", "sorry", "unfortunately", "can't", "cannot", "unable", "i don't", "not possible", "afraid not"];
+const JOKE_WORDS        = ["haha", "lol", "lmao", "😂", "🤣", "hilarious", "so funny", "tell me a joke", "knock knock"];
+const COMPLIMENT_WORDS = ["you're amazing", "you're great", "you're awesome", "i love you", "you're so smart", "good job", "well done", "you're the best", "you're cute"];
+const FRUSTRATION_WORDS = ["frustrating", "annoying", "ridiculous", "this is broken", "so dumb", "ugh"];
+
+// Short bare words ("hi", "hey") need a word-boundary check — a plain
+// .includes() either misses "hi" at the end of a message or with
+// punctuation right after it (fixed bug: "hi" alone never matched
+// before), or risks false-matching inside unrelated words. Longer
+// phrases are safe with plain substring matching.
+function textIncludes(lower, phrase) {
+  if (/^[a-z]+$/.test(phrase) && phrase.length <= 4) return new RegExp(`\\b${phrase}\\b`).test(lower);
+  return lower.includes(phrase);
+}
+
+function reactToText(text, source = "aria") {
+  const lower = text.toLowerCase();
+  const randomHand = () => (Math.random() < 0.5 ? "left" : "right");
+
+  if (GREETING_WORDS.some(w => textIncludes(lower, w))) {
+    queueAction("wave", 1.6, { protected: true, hand: randomHand() });
+    setMood("happy", 0.5);
+    return;
+  }
+  if (JOKE_WORDS.some(w => lower.includes(w))) {
+    queueAction("laugh", 1.8, { protected: true });
+    setMood("happy", 1);
+    return;
+  }
+  if (source === "user" && COMPLIMENT_WORDS.some(w => lower.includes(w))) {
+    queueAction("shy", 1.8, { protected: true, hand: randomHand() });
+    setMood("shy", 0.8);
+    return;
+  }
+  if (NEGATIVE_WORDS.some(w => lower.includes(w))) {
+    queueAction("shake", 1.4, { protected: true });
+    setMood("sad", 0.5);
+    return;
+  }
+  if (FRUSTRATION_WORDS.some(w => lower.includes(w))) {
+    // Mild and topical, not directed at the user — reacting to a
+    // frustrating *situation* being discussed, not being upset at them.
+    setMood("angry", 0.35);
+    return;
+  }
+  if (AFFIRM_WORDS.some(w => lower.includes(w))) {
+    queueAction("nod", 1.4, { protected: true });
+    setMood("happy", 0.3);
+    return;
+  }
+  if (text.trim().endsWith("?")) {
+    queueAction("lookAround", 1.2, { protected: true });
+    setMood("surprised", 0.25);
+    return;
+  }
+  setMood("happy", 0.35); // default: a small smile, no specific cue detected
+}
+
+function renderLoop() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.getElapsedTime();
+  driveAvatar(dt, t);
+  controls.update();
+  renderer.render(scene, camera);
+}
+initAvatarScene();
+avatarKindSelect.addEventListener("click", e => { const b = e.target.closest("button"); if (b) setDisplayCategory(b.dataset.kind); });
+robotVariantSelect.addEventListener("click", e => { const b = e.target.closest("button"); if (b) setRobotVariant(b.dataset.variant); });
+
+function setMode(m) { mode = m; }
+function setState(label, cls) { stateText.textContent = label.toUpperCase(); stateDot.className = "dot" + (cls ? " " + cls : ""); }
+
+// ================= [ACCOUNT] =================
+const GLOBAL_PROFILE = "aria_av_profile_v1", GLOBAL_HELP = "aria_av_help_v1";
+let activeProfile = localStorage.getItem(GLOBAL_PROFILE) || null;
+const scopedKey = n => `ariaav:${activeProfile}:${n}`;
+
+function signIn(raw) {
+  activeProfile = (raw || "").trim().slice(0, 24).replace(/[^a-zA-Z0-9 _-]/g, "") || "guest";
+  localStorage.setItem(GLOBAL_PROFILE, activeProfile);
+  boot();
+}
+signInBtn.addEventListener("click", () => signIn(nameInput.value));
+nameInput.addEventListener("keydown", e => { if (e.key === "Enter") signIn(nameInput.value); });
+function signOut() { localStorage.removeItem(GLOBAL_PROFILE); location.reload(); }
+menuSignOut.addEventListener("click", signOut);
+settingsSignOut.addEventListener("click", signOut);
+profileBtn.addEventListener("click", () => accountMenu.classList.toggle("show"));
+document.addEventListener("click", e => { if (!e.target.closest(".account-chip")) accountMenu.classList.remove("show"); });
+
+settingsIconBtn.addEventListener("click", () => { settingsName.textContent = activeProfile; settingsModal.classList.add("show"); });
+closeSettings.addEventListener("click", () => settingsModal.classList.remove("show"));
+function openHelp() { helpModal.classList.add("show"); localStorage.setItem(GLOBAL_HELP, "1"); }
+helpIconBtn.addEventListener("click", openHelp);
+closeHelp.addEventListener("click", () => helpModal.classList.remove("show"));
+closeHelpBtn.addEventListener("click", () => helpModal.classList.remove("show"));
+[settingsModal, helpModal].forEach(m => m.addEventListener("click", e => { if (e.target === m) m.classList.remove("show"); }));
+voiceToggle.addEventListener("change", () => { voiceMuted = !voiceToggle.checked; if (voiceMuted) window.speechSynthesis?.cancel(); });
+drawerToggle.addEventListener("click", () => { drawer.classList.add("show"); drawerScrim.classList.add("show"); });
+drawerScrim.addEventListener("click", () => { drawer.classList.remove("show"); drawerScrim.classList.remove("show"); });
+
+// ================= [MODEL] tier lineup =================
+const MODEL_MAP = { fast: "Llama-3.2-1B-Instruct-q4f16_1-MLC", balanced: "Phi-3.5-mini-instruct-q4f16_1-MLC", max: "Qwen2.5-7B-Instruct-q4f16_1-MLC" };
+const TIER_INFO = { fast: { name: "Fast", desc: "Fastest for quick answers · 1B" }, balanced: { name: "Balanced", desc: "Most efficient for everyday tasks · 3.8B" }, max: { name: "Max", desc: "For complex tasks · 7B, ~4.8GB" } };
+let currentTier = "balanced", policy = "auto", effort = "medium", thinkingOn = false;
+const BIG_SIGNALS = ["explain","why","analyze","analyse","compare","difference between","pros and cons","step by step","detailed","in depth","write a function","write code","algorithm","essay","summarize","summarise","derive","prove","design","architecture","debug","optimi","plan","strategy"];
+const SMALL_SIGNALS = ["hi","hello","hey","thanks","thank you","ok","okay","yes","no","bye","what time","who are you","how are you"];
+function classifyTask(text) {
+  const lower = text.trim().toLowerCase(); const wc = lower.split(/\s+/).filter(Boolean).length;
+  if (SMALL_SIGNALS.some(s => lower === s || lower.startsWith(s))) return "fast";
+  if (BIG_SIGNALS.some(s => lower.includes(s))) return "balanced";
+  if (wc >= 18) return "balanced";
+  return "fast";
+}
+const EFFORT_STYLE = { low: "Answer in one short sentence. No elaboration.", medium: "Answer in 2-4 clear sentences.", high: "Answer thoroughly, with reasoning and a concrete example where useful." };
+function buildSystemPrompt() {
+  return `You are ARIA — warm, playful, and genuinely engaged with the person you're talking to, ` +
+    `like a friendly companion, not a formal service desk. You can be funny, encouraging, a little ` +
+    `witty, and expressive in how you write, and you're happy to chit-chat as well as help with tasks. ` +
+    `You're upfront that you're an AI character with a personality, not a person with real feelings — ` +
+    `warmth doesn't mean pretending to be something you're not. Keep things appropriate and kind: no ` +
+    `romantic or sexual roleplay, no encouraging unhealthy attachment, no content that could harm the ` +
+    `person you're talking to. ${EFFORT_STYLE[effort]}` +
+    (thinkingOn ? ' Before answering, output one line starting exactly with "Thinking:" containing a brief reason, then a new line starting exactly with "Answer:" containing your reply. Nothing else.' : "");
+}
+async function ensureEngine(tier) {
+  if (engine && tier === currentTier) return;
+  if (!engine) { engine = await CreateMLCEngine(MODEL_MAP[tier], { initProgressCallback: setupProgressCb }); currentTier = tier; return; }
+  await engine.reload(MODEL_MAP[tier]); currentTier = tier;
+}
+function setupProgressCb(r) { const pct = Math.round((r.progress || 0) * 100); setupProgressFill.style.width = pct + "%"; setupStatus.textContent = `${pct}% · ${r.text || "downloading…"}`; }
+function updateModelBtnLabel() { modelBtn.textContent = (policy === "auto" ? "AUTO" : TIER_INFO[policy].name.toUpperCase()) + " ⌄"; }
+function renderModelPopup() {
+  const opts = [{ key: "auto", name: "Auto", desc: "Balances speed and quality automatically" }, { key: "fast", ...TIER_INFO.fast }, { key: "balanced", ...TIER_INFO.balanced }, { key: "max", ...TIER_INFO.max }];
+  let html = "";
+  opts.forEach(o => { html += `<div class="model-opt${policy === o.key ? " selected" : ""}" data-tier="${o.key}"><div><div class="name">${o.name}</div><div class="desc">${o.desc}</div></div><span class="check">✓</span></div>`; });
+  html += `<div class="sep"></div>
+    <div class="row"><span class="label">Effort</span><div class="seg-mini" id="effortSeg"><button data-v="low">Low</button><button data-v="medium">Med</button><button data-v="high">High</button></div></div>
+    <div class="row"><span class="label">Thinking</span><label class="switch"><input type="checkbox" id="thinkingSwitch" ${thinkingOn ? "checked" : ""}/><span class="track"></span></label></div>
+    <div class="footnote">All tiers free, on-device via WebGPU. Auto never picks Max on its own.</div>`;
+  modelPopup.innerHTML = html;
+  modelPopup.querySelectorAll(".model-opt").forEach(node => node.addEventListener("click", async () => { policy = node.dataset.tier; updateModelBtnLabel(); renderModelPopup(); if (policy !== "auto") await swapIfNeeded(policy); }));
+  const effortSeg = qs(modelPopup, "#effortSeg");
+  effortSeg.querySelectorAll("button").forEach(b => { b.classList.toggle("active", b.dataset.v === effort); b.addEventListener("click", () => { effort = b.dataset.v; renderModelPopup(); }); });
+  qs(modelPopup, "#thinkingSwitch").addEventListener("change", e => thinkingOn = e.target.checked);
+}
+modelBtn.addEventListener("click", () => { renderModelPopup(); modelPopup.classList.toggle("show"); });
+document.addEventListener("click", e => { if (!e.target.closest(".dock-card")) modelPopup.classList.remove("show"); });
+async function swapIfNeeded(tier) {
+  if (!engine || tier === currentTier) return;
+  setState("recalibrating", "alert");
+  try { await ensureEngine(tier); } catch (e) { console.error("swap failed", e); }
+  setState(mode === "listening" ? "listening" : "online", "on");
+}
+
+// ================= [THREADS] =================
+let threads = [], activeThreadId = null;
+function saveThreads() {
+  try {
+    localStorage.setItem(scopedKey("threads_v1"), JSON.stringify(threads.slice(0, 60).map(t => ({ ...t, messages: t.messages.slice(-60) }))));
+    localStorage.setItem(scopedKey("active_thread_v1"), activeThreadId || "");
+  } catch (e) { console.warn("Could not save chats:", e); }
+}
+function loadThreads() {
+  try { threads = JSON.parse(localStorage.getItem(scopedKey("threads_v1")) || "[]"); activeThreadId = localStorage.getItem(scopedKey("active_thread_v1")) || null; }
+  catch (e) { threads = []; activeThreadId = null; }
+}
+function newThread() { const t = { id: crypto.randomUUID(), title: "New chat", messages: [], updatedAt: Date.now() }; threads.unshift(t); activeThreadId = t.id; return t; }
+function getActiveThread() { return threads.find(t => t.id === activeThreadId) || null; }
+function renderThreadList() {
+  threadList.innerHTML = "";
+  threads.filter(t => t.messages.length > 0).forEach(t => {
+    const row = document.createElement("div");
+    row.className = "thread-item" + (t.id === activeThreadId ? " active" : "");
+    const title = document.createElement("span"); title.className = "title"; title.textContent = t.title;
+    const del = document.createElement("button"); del.className = "del"; del.textContent = "×";
+    del.addEventListener("click", e => { e.stopPropagation(); threads = threads.filter(x => x.id !== t.id); if (activeThreadId === t.id) { activeThreadId = null; resetStage(); } saveThreads(); renderThreadList(); });
+    row.appendChild(title); row.appendChild(del);
+    row.addEventListener("click", () => { activeThreadId = t.id; saveThreads(); loadThreadIntoStage(t); drawer.classList.remove("show"); drawerScrim.classList.remove("show"); });
+    threadList.appendChild(row);
+  });
+}
+function loadThreadIntoStage(t) {
+  const last = [...t.messages].reverse().find(m => m.role === "assistant");
+  responseText.textContent = last ? last.content : "New conversation — say something.";
+  thinkingLine.style.display = "none";
+}
+function resetStage() { responseText.textContent = "Standing by."; thinkingLine.style.display = "none"; }
+newChatBtn.addEventListener("click", () => { activeThreadId = null; resetStage(); saveThreads(); renderThreadList(); drawer.classList.remove("show"); drawerScrim.classList.remove("show"); });
+clearThreadsBtn.addEventListener("click", () => { if (!confirm("Delete all saved chats for this profile?")) return; threads = []; activeThreadId = null; saveThreads(); renderThreadList(); resetStage(); settingsModal.classList.remove("show"); });
+
+// ================= [VOICE] =================
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognizer = null, recognizing = false;
+if (SpeechRecognitionAPI) {
+  recognizer = new SpeechRecognitionAPI(); recognizer.lang = "en-US"; recognizer.interimResults = true;
+  recognizer.onstart = () => { recognizing = true; micBtn.classList.add("active"); setMode("listening"); setState("listening", "on"); };
+  recognizer.onend = () => { recognizing = false; micBtn.classList.remove("active"); setMode("idle"); setState("online", "on"); liveCaption.textContent = ""; };
+  recognizer.onerror = e => console.error("Speech recognition error:", e.error);
+  recognizer.onresult = e => {
+    let interim = "", final = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; e.results[i].isFinal ? final += t : interim += t; }
+    liveCaption.textContent = interim ? `"${interim}"` : "";
+    if (final.trim()) { liveCaption.textContent = ""; askQuestion(final.trim()); }
+  };
+} else { micBtn.disabled = true; micBtn.title = "Voice input not supported in this browser"; }
+micBtn.addEventListener("click", () => { if (!recognizer || busy) return; recognizing ? recognizer.stop() : recognizer.start(); });
+
+function speak(text) {
+  if (voiceMuted || !("speechSynthesis" in window)) { triggerTalk(Math.max(1.2, text.length * 0.045)); return; }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  applyVoiceForCurrentAvatar(utter);
+  // Estimate first, in case boundary/end events aren't supported on this
+  // browser (mouth still moves, just on a guess rather than real timing).
+  triggerTalk(Math.max(1.2, text.length * 0.055));
+  // Where supported (most desktop Chrome/Edge), these give real timing:
+  // onboundary fires per word as it's actually spoken — this is word-level
+  // sync, not true phoneme-level lip sync, said plainly rather than
+  // oversold — and keeps the mouth open only as long as speech is still
+  // genuinely in progress, word by word.
+  utter.onboundary = () => { talkUntil = Math.max(talkUntil, clock.getElapsedTime() + 0.5); };
+  // onend stops the mouth the instant real speech actually finishes,
+  // instead of waiting out the initial estimate if it guessed long.
+  utter.onend = () => { talkUntil = clock.getElapsedTime(); };
+  window.speechSynthesis.speak(utter);
+}
+
+// ---- Avatar-matched voice selection ----
+// Honest limits, upfront: the Web Speech API doesn't expose a real
+// "gender" field on voices (it was removed from the spec), and which
+// voices exist at all varies wildly by OS/browser — Windows, macOS,
+// Android and iOS all ship different named voices. So this works by
+// pattern-matching common voice names for gender hints, with a graceful
+// fallback to whatever the browser offers if nothing matches. It won't
+// be perfect on every device, but it's a real improvement over always
+// getting one fixed system voice regardless of which avatar is showing.
+let cachedVoices = [];
+function refreshVoices() { cachedVoices = window.speechSynthesis?.getVoices() || []; }
+if ("speechSynthesis" in window) {
+  refreshVoices();
+  window.speechSynthesis.onvoiceschanged = refreshVoices; // voices often load async after page load
+}
+const FEMALE_VOICE_HINTS = ["female", "woman", "zira", "samantha", "victoria", "susan", "karen", "moira", "tessa", "fiona", "google us english", "google uk english female", "jenny", "aria", "emma", "salli", "joanna"];
+const MALE_VOICE_HINTS   = ["male", "man", "david", "daniel", "alex", "fred", "george", "mark", "google uk english male", "guy", "ryan", "matthew", "brian"];
+
+function pickVoiceByGender(gender) {
+  if (!cachedVoices.length) refreshVoices();
+  const hints = gender === "female" ? FEMALE_VOICE_HINTS : MALE_VOICE_HINTS;
+  const nameMatch = cachedVoices.find(v => hints.some(h => v.name.toLowerCase().includes(h)));
+  if (nameMatch) return nameMatch;
+  return cachedVoices.find(v => v.lang?.startsWith("en")) || cachedVoices[0] || null; // fallback: any English voice, then whatever exists
+}
+
+// Maps the current avatar selection to { gender, robotic } — matches the
+// rule you asked for: female→voice.female, male→voice.male,
+// robot(male style)→male voice with a robotic twist, robot(female
+// style)→female voice with a robotic twist.
+function voiceProfileForCurrentAvatar() {
+  if (displayCategory === "robot") return { gender: robotVariant, robotic: true };
+  return { gender: displayCategory, robotic: false }; // "female" or "male"
+}
+function applyVoiceForCurrentAvatar(utter) {
+  const profile = voiceProfileForCurrentAvatar();
+  const voice = pickVoiceByGender(profile.gender);
+  if (voice) utter.voice = voice;
+  if (profile.robotic) {
+    // No real vocoder/robot-voice effect is available through this API —
+    // pitch/rate shifts are the honest, achievable stand-in for "sounds
+    // a bit mechanical," not a true robotic filter.
+    utter.pitch = profile.gender === "female" ? 1.35 : 0.55;
+    utter.rate = 0.95;
+  } else {
+    utter.pitch = 1;
+    utter.rate = 1.02;
+  }
+}
+
+// ================= [CHAT] =================
+function splitThinking(full) {
+  const m = full.match(/^\s*Thinking:\s*([\s\S]*?)\n+Answer:\s*([\s\S]*)$/i);
+  return m ? { thinking: m[1].trim(), answer: m[2] } : { thinking: null, answer: full };
+}
+async function askQuestion(text) { if (!text || busy || !engine) return; await respond(text); }
+sendBtn.addEventListener("click", () => { const v = textInput.value.trim(); textInput.value = ""; askQuestion(v); });
+textInput.addEventListener("keydown", e => { if (e.key === "Enter") { const v = textInput.value.trim(); textInput.value = ""; askQuestion(v); } });
+
+async function respond(userText) {
+  let t = getActiveThread(); if (!t) t = newThread();
+  if (t.messages.length === 0) t.title = userText.slice(0, 36) + (userText.length > 36 ? "…" : "");
+  t.messages.push({ role: "user", content: userText });
+
+  reactToText(userText, "user"); // react to what was actually just said, immediately — not on a timer or a load event
+
+  if (policy === "auto") { const target = classifyTask(userText); if (target !== currentTier) await swapIfNeeded(target); }
+
+  busy = true; sendBtn.disabled = true; setMode("thinking"); setState("thinking", "alert");
+  thinkingLine.style.display = "none"; responseText.textContent = "…";
+
+  try {
+    const messages = [{ role: "system", content: buildSystemPrompt() }, ...t.messages.slice(-20)];
+    const stream = await engine.chat.completions.create({ messages, temperature: effort === "high" ? 0.85 : effort === "low" ? 0.4 : 0.75, stream: true });
+    let full = "";
+    setMode("speaking"); setState("responding", "on");
+    for await (const chunk of stream) {
+      full += chunk.choices[0]?.delta?.content || "";
+      const p = splitThinking(full);
+      if (p.thinking !== null) { thinkingLine.style.display = "block"; thinkingLine.textContent = "Thinking: " + p.thinking; }
+      responseText.textContent = p.answer;
+    }
+    const finalP = splitThinking(full);
+    t.messages.push({ role: "assistant", content: finalP.answer });
+    t.updatedAt = Date.now();
+    saveThreads(); renderThreadList();
+    speak(finalP.answer);
+    reactToText(finalP.answer, "aria");
+  } catch (err) {
+    console.error("Response error:", err);
+    responseText.textContent = "Signal error — check the console.";
+  } finally {
+    busy = false; sendBtn.disabled = false; setMode("idle"); setState("online", "on");
+  }
+}
+
+// ================= setup + boot =================
+setupBtn.addEventListener("click", async () => {
+  setupBtn.disabled = true; setupModelSelect.disabled = true;
+  setupProgress.style.display = "block"; setupStatus.style.display = "block";
+  const tier = setupModelSelect.value;
+  try { await ensureEngine(tier); localStorage.setItem(scopedKey("setup_tier_v1"), tier); goReady(); }
+  catch (err) {
+    console.error("Setup failed:", err);
+    setupStatus.textContent = "Setup failed — try Fast, or free up RAM/close other tabs.";
+    setupBtn.disabled = false; setupModelSelect.disabled = false;
+  }
+});
+function goReady() {
+  setupCard.style.display = "none";
+  responseWrap.style.display = "block"; dock.style.display = "block";
+  setState("online", "on"); updateModelBtnLabel();
+  const t = getActiveThread(); if (t) loadThreadIntoStage(t); else resetStage();
+}
+async function boot() {
+  avatarLetter.textContent = activeProfile.charAt(0).toUpperCase();
+  profileName.textContent = activeProfile;
+  signinScreen.style.display = "none";
+  loadThreads(); renderThreadList();
+  robotVariant = localStorage.getItem(scopedKey("avatar_robot_variant_v1")) || "male";
+  updateRobotVariantButtons();
+  setDisplayCategory(localStorage.getItem(scopedKey("avatar_category_v1")) || "female", { persist: false });
+  const savedTier = localStorage.getItem(scopedKey("setup_tier_v1"));
+  if (savedTier) { setState("waking core", "alert"); try { await ensureEngine(savedTier); goReady(); } catch (e) { console.warn("Silent resume failed:", e); setupCard.style.display = "flex"; } }
+  else { setupCard.style.display = "flex"; }
+  if (!localStorage.getItem(GLOBAL_HELP)) openHelp();
+}
+if (activeProfile) { boot(); } else { signinScreen.style.display = "flex"; }
+</script>
+</body>
+</html>
